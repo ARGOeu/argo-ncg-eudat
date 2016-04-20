@@ -1,12 +1,12 @@
 %define lperllib modules/NCG
 %define templatedir %{_datadir}/grid-monitoring/config-gen/nagios
 %define configdir /etc/ncg
-%define perllib %{perl_vendorarch}/vendor_perl/5.8.5
+%define perllib %{perl_vendorarch}/5.8.5
 
 Summary: WLCG monitoring configuration generator
 Name: argo-ncg-eudat
 Version: 0.96.2
-Release: 3%{?dist}
+Release: 4%{?dist}
 License: ASL 2.0
 Group: Network/Monitoring
 Source0: %{name}-%{version}.tar.gz
