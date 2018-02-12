@@ -5,7 +5,7 @@
 
 Summary: WLCG monitoring configuration generator
 Name: argo-ncg-eudat
-Version: 0.96.2
+Version: 0.96.3
 Release: 2%{?dist}
 License: ASL 2.0
 Group: Network/Monitoring
