@@ -121,8 +121,6 @@ sub new
         if (!defined $self->{ENABLE_NOTIFICATIONS} && ! defined $self->{SEND_TO_EMAIL});
     $self->{ENABLE_FLAP_DETECTION} = $DEFAULT_ENABLE_FLAP_DETECTION
         unless (defined $self->{ENABLE_FLAP_DETECTION});
-    $self->{LOCAL_METRIC_STORE} = 0
-        unless (defined $self->{LOCAL_METRIC_STORE});
     $self->{SEND_TO_MSG} = 1
         unless (defined $self->{SEND_TO_MSG});
     $self->{HOST_NOTIFICATIONS_OPTIONS} = "d,r"
@@ -131,6 +129,11 @@ sub new
         unless (defined $self->{SERVICE_NOTIFICATIONS_OPTIONS});
     $self->{VO_HOST_FILTER} = $DEFAULT_VO_HOST_FILTER
         unless (defined $self->{VO_HOST_FILTER});
+
+    if (!$self->{TENANT}) {
+        $self->error("Tenant name is not defined. Unable to generate nagios commands configuration.");
+            return;
+    }
 
     if ($self->{MULTI_SITE_GLOBAL}) {
         if (! defined $self->{MULTI_SITE_SITES}) {
@@ -184,7 +187,6 @@ sub new
     if ($self->{BACKUP_INSTANCE}) {
         $self->{SEND_TO_MSG} = 0;
         $self->{ENABLE_NOTIFICATIONS} = 0;
-        $self->{SEND_TO_DASHBOARD} = 0;
     }
 
     $self;
@@ -467,26 +469,14 @@ sub _genCommands {
         return;
     }
 
-    my $sendToDashboard='';
-    my $ggusServerFqdn='';
-
-    if ($self->{GGUS_SERVER_FQDN}) {
-        $ggusServerFqdn = "--ggus-server $self->{GGUS_SERVER_FQDN}";
-    }
-    if ($self->{SEND_TO_DASHBOARD}) {
-        $sendToDashboard = "--send-to-dashboard";
-    }
-
     while ($line = <$TEMPL>){
         $line =~ s/<WLCG_PLUGINS_DIR>/$self->{WLCG_PLUGINS_DIR}/g;
         $line =~ s/<WLCG_PROBES_DIR>/$self->{WLCG_PROBES_DIR}/g;
         $line =~ s/<NAGIOS_ROLE>/$self->{NAGIOS_ROLE}/g;
         $line =~ s/<NOTIFICATION_HEADER>/$self->{NOTIFICATION_HEADER}/g;
         $line =~ s/<NAGIOS_SERVER>/$self->{NAGIOS_SERVER}/g;
-        $line =~ s/<LOCAL_METRIC_STORE>/$self->{LOCAL_METRIC_STORE}/g;
-        $line =~ s/<SEND_TO_DASHBOARD>/$sendToDashboard/g;
-        $line =~ s/<GGUS_SERVER_FQDN>/$ggusServerFqdn/g;
         $line =~ s/<SEND_TO_MSG>/$self->{SEND_TO_MSG}/g;
+        $line =~ s/<TENANT>/$self->{TENANT}/g;
         print $CONFIG $line;
     }
 
@@ -1783,7 +1773,6 @@ sub _genServices {
             my $serviceType = join (',', $self->{SITEDB}->metricServices($host, $metric));
             my $obsess = $self->{SITEDB}->metricFlag($host, $metric, "OBSESS") || 0;
             my $contactgroupLocal = $contactgroup;
-            my $roc = $self->{SITEDB}->siteROC || $self->{ROC};
             my $metricVo = $self->{SITEDB}->metricFlag($host, $metric, "VO");
 
             my $custom = {};
@@ -1793,19 +1782,6 @@ sub _genServices {
             $custom->{"_service_flavour"} = $serviceType;
             $custom->{"_grid"} = $grids if ($grids);
             $custom->{"_server"} = $self->{NAGIOS_SERVER};
-            $custom->{"_last_notification_type"} = "";
-            $custom->{"_dashboard_notification_status"} = "";
-            $custom->{"_dashboard_notification_status_last_update"} = "";
-            if ($self->{GGUS_SERVER_FQDN}) {
-                $custom->{"_GGUS"} = "";
-            }
-            if ($roc) {
-                $custom->{"_roc"} = $roc;
-            }
-
-            if ($obsess && ( $self->{GGUS_SERVER_FQDN} || $self->{SEND_TO_DASHBOARD} )) {
-                $contactgroupLocal .= ", msg-contacts";
-            }
 
             $metricSgroup = $self->_getLocalServiceGroups($host, $metric, $servicegroups);
 
@@ -2536,8 +2512,7 @@ configuration in case when existing Nagios server is used:
 
 Creates new NCG::ConfigGen::Nagios instance. Argument $options is hash
 reference that can contain following elements:
-  BACKUP_INSTANCE - if set SEND_TO_MSG, SEND_TO_DASHBOARD and 
-                    ENABLE_NOTIFICATIONS will be set to 0. This variable is
+  BACKUP_INSTANCE - if set SEND_TO_MSG will be set to 0. This variable is
                     used for setting up backup SAM instance (SAM-1127)
   (default: unset)
 
@@ -2574,11 +2549,6 @@ reference that can contain following elements:
                      is needed for metrics with parameters stored in file
   (default: OUTPUT_DIR)
 
-  GGUS_SERVER_FQDN - if set to valid GGUS server handle_service_change will
-                    send notifications to GGUS
-                   - furthremore services which publish notifications will
-                   have _GGUS custom var added
-
   GLITE_VERSION - which version of Glite UI the tests will run on.
   (default: UNKNOWN)
 
@@ -2592,10 +2562,6 @@ reference that can contain following elements:
 
   INCLUDE_LB_NODE - if true configuration for load balancing nodes
   will be generated.
-  (default: false)
-
-  LOCAL_METRIC_STORE - if true configuration for storing results to
-  local metric store.
   (default: false)
 
   MULTI_SITE_GLOBAL - if true only global configuration for multisite
@@ -2723,9 +2689,6 @@ reference that can contain following elements:
   ROC - name of the region which is being monitored. It will be overwritten
         from the value from SiteInfo module.
   (default: )
-
-  SEND_TO_DASHBOARD - if set handle_service_change will send
-                    notifications to dashboard
 
   SEND_TO_EMAIL - see ENABLE_NOTIFICATIONS
   
